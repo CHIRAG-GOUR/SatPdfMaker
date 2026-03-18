@@ -1,0 +1,19 @@
+# Node dependencies
+node_modules/
+npm-debug.log
+
+# Environment variables
+.env
+
+# Output and temp files
+output/
+uploads/
+data/
+
+# Frontend dependencies
+client/node_modules/
+client/dist/
+
+# OS files
+.DS_Store
+Thumbs.db
