@@ -4,6 +4,7 @@ import './App.css';
 function App() {
   const [excelFile, setExcelFile] = useState(null);
   const [frontCover, setFrontCover] = useState(null);
+  const [page2Image, setPage2Image] = useState(null);
   const [backCover, setBackCover] = useState(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null);
@@ -12,6 +13,7 @@ function App() {
   const [session, setSession] = useState(null); // { sessionId, previewHtml, totalStudents, firstStudentName }
   const [batchProgress, setBatchProgress] = useState(null); // { current, total, batchNumber }
   const [isGenerating, setIsGenerating] = useState(false);
+  const [targetGrade, setTargetGrade] = useState('all');
   const [generatedNames, setGeneratedNames] = useState([]); // List of newly generated student names
 
   const namesEndRef = useRef(null);
@@ -24,8 +26,8 @@ function App() {
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!excelFile || !frontCover || !backCover) {
-        alert("Please upload all files (Excel, Front Cover, Back Cover).");
+    if (!excelFile || !frontCover || !page2Image || !backCover) {
+        alert("Please upload all files (Excel, Front Cover, Page 2 Image, Back Cover).");
         return;
     }
 
@@ -34,7 +36,9 @@ function App() {
     const formData = new FormData();
     formData.append('excel', excelFile);
     formData.append('frontCover', frontCover);
+    formData.append('page2Image', page2Image);
     formData.append('backCover', backCover);
+      formData.append('targetGrade', targetGrade);
 
     try {
       const response = await fetch('http://localhost:3000/api/upload', {
@@ -162,6 +166,17 @@ function App() {
             </div>
 
             <div className="form-group">
+              <label htmlFor="page2Image">Page 2 Image</label>
+              <input
+                type="file"
+                id="page2Image"
+                accept="image/*"
+                onChange={(e) => setPage2Image(e.target.files[0])}
+                required
+              />
+            </div>
+
+            <div className="form-group">
               <label htmlFor="backCover">Back Cover Image (Page 4)</label>
               <input
                 type="file"
@@ -263,4 +278,5 @@ function App() {
 }
 
 export default App;
+
 

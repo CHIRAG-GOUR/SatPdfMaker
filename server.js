@@ -10,6 +10,61 @@ const Handlebars = require('handlebars');
 const crypto = require('crypto');
 const sharp = require('sharp');
 const pLimit = require('p-limit');
+const { google } = require('googleapis');
+
+let driveClient = null;
+const KEYFILEPATH = path.join(__dirname, 'drive_credentials.json');
+const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+
+if (fs.existsSync(KEYFILEPATH)) {
+    try {
+        const auth = new google.auth.GoogleAuth({
+            keyFile: KEYFILEPATH,
+            scopes: SCOPES,
+        });
+        driveClient = google.drive({ version: 'v3', auth });
+        console.log("? Google Drive credentials found. Drive upload enabled.");
+    } catch(err) {
+        console.log("?? Error initializing Google Drive", err);
+    }
+} else {
+    console.log("?? No drive_credentials.json found. Google Drive upload disabled.");
+}
+
+async function uploadToDrive(filePath, fileName, targetGrade) {
+    if (!driveClient || targetGrade === 'all') return;
+    
+    let folderId = null;
+    if (targetGrade === 'grade1') folderId = process.env.DRIVE_FOLDER_GRADE_1;
+    if (targetGrade === 'grade2') folderId = process.env.DRIVE_FOLDER_GRADE_2;
+    if (targetGrade === 'grade3') folderId = process.env.DRIVE_FOLDER_GRADE_3;
+    if (targetGrade === 'grade4') folderId = process.env.DRIVE_FOLDER_GRADE_4;
+
+    if (!folderId) {
+        console.log("No folder ID configured for", targetGrade);
+        return;
+    }
+
+    try {
+        const fileMetadata = {
+            name: fileName,
+            parents: [folderId]
+        };
+        const media = {
+            mimeType: 'application/pdf',
+            body: fs.createReadStream(filePath)
+        };
+
+        const res = await driveClient.files.create({
+            resource: fileMetadata,
+            media: media,
+            fields: 'id'
+        });
+        console.log(`? Uploaded ${fileName} to Drive. File ID: ${res.data.id}`);
+    } catch (err) {
+        console.error(`? Failed to upload ${fileName} to Drive:`, err.message);
+    }
+}
 require('dotenv').config();
 
 const app = express();
@@ -90,7 +145,7 @@ const numericKeys = [
 
 const templatePath = path.join(__dirname, 'templates', 'report.hbs');
 
-async function compileStudentHtml(studentData, frontImageBase64, backImageBase64, aiSummary) {
+async function compileStudentHtml(studentData, frontImageBase64, page2ImageBase64, backImageBase64, aiSummary) {
     const templateHtml = fs.readFileSync(templatePath, 'utf8');
     const template = Handlebars.compile(templateHtml);
     
@@ -176,6 +231,7 @@ async function compileStudentHtml(studentData, frontImageBase64, backImageBase64
         Grade: studentData.Student_Grade || 'N/A',
         currentDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
         frontCover: frontImageBase64 || '',
+        page2Image: page2ImageBase64 || '',
         backCover: backImageBase64 || '',
         aiSummary,
         top3Profiles,
@@ -192,11 +248,13 @@ const sessions = {};
 app.post('/api/upload', upload.fields([
     { name: 'excel', maxCount: 1 },
     { name: 'frontCover', maxCount: 1 },
+    { name: 'page2Image', maxCount: 1 },
     { name: 'backCover', maxCount: 1 }
 ]), async (req, res) => {
     try {
         const excelFile = req.files['excel']?.[0];
         const frontCoverFile = req.files['frontCover']?.[0];
+        const page2ImageFile = req.files['page2Image']?.[0];
         const backCoverFile = req.files['backCover']?.[0];
 
         if (!excelFile) return res.status(400).json({ error: "Excel file is required." });
@@ -206,9 +264,16 @@ app.post('/api/upload', upload.fields([
         const students = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { range: 1, defval: "" });
 
         const frontImageBase64 = await compressAndGetBase64(frontCoverFile?.path);
+        const page2ImageBase64 = await compressAndGetBase64(page2ImageFile?.path);
         const backImageBase64 = await compressAndGetBase64(backCoverFile?.path);
 
-        const validStudents = students.filter(s => (s.Student_Name && s.Student_Name !== "") || s.Student_Grade !== "");
+                let validStudents = students.filter(s => (s.Student_Name && s.Student_Name !== "") || s.Student_Grade !== "");
+        const targetGrade = req.body.targetGrade || 'all';
+
+        if (targetGrade !== 'all') {
+            const gradeNum = targetGrade.replace('grade', ''); // "1", "2", "3", "4"
+            validStudents = validStudents.filter(s => String(s.Student_Grade).trim() === gradeNum);
+        }
 
         if (validStudents.length === 0) {
            return res.json({ error: "No valid student rows found in excel." });
@@ -218,18 +283,20 @@ app.post('/api/upload', upload.fields([
         sessions[sessionId] = {
             students: validStudents,
             frontImageBase64,
+            page2ImageBase64,
             backImageBase64
         };
 
         // Generate preview for the first student
         const firstStudent = validStudents[0];
         const previewAi = await getGeminiSummary(firstStudent);
-        const previewHtml = await compileStudentHtml(firstStudent, frontImageBase64, backImageBase64, previewAi);
+        const previewHtml = await compileStudentHtml(firstStudent, frontImageBase64, page2ImageBase64, backImageBase64, previewAi);
 
         res.json({ 
             message: "Uploaded and parsed successfully",
             sessionId,
             totalStudents: validStudents.length,
+            targetGrade,
             previewHtml,
             firstStudentName: firstStudent.Student_Name || "Default Student"
         });
@@ -263,7 +330,7 @@ app.post('/api/generate_batch', async (req, res) => {
                 console.log(`Processing: ${student.Student_Name || 'Unknown'} (${startIndex + i + 1}/${session.students.length})`);
                 
                 const aiSummary = await getGeminiSummary(student);
-                const htmlContent = await compileStudentHtml(student, session.frontImageBase64, session.backImageBase64, aiSummary);
+                const htmlContent = await compileStudentHtml(student, session.frontImageBase64, session.page2ImageBase64, session.backImageBase64, aiSummary);
 
                 const validName = student.Student_Name ? String(student.Student_Name).trim() : 'Unknown_Student';
                 const safeName = validName.replace(/[^a-zA-Z0-9]/gi, '_');
@@ -279,7 +346,11 @@ app.post('/api/generate_batch', async (req, res) => {
                         printBackground: true,
                         margin: { top: '0', right: '0', bottom: '0', left: '0' }
                     });
-                    generatedFiles.push({ file: `${safeName}_Report_${timestamp}.pdf`, name: validName });
+                    const fileName = `${safeName}_Report_${timestamp}.pdf`;
+                      generatedFiles.push({ file: fileName, name: validName });
+                      if (session.targetGrade && session.targetGrade !== 'all') {
+                          await uploadToDrive(outputPath, fileName, session.targetGrade);
+                      }
                 } finally {
                     await page.close();
                 }
@@ -300,4 +371,16 @@ if (server) server.close();
 server = app.listen(port, () => {
     console.log(`Backend server running at http://localhost:${port}`);
 });
+
+
+
+
+
+
+
+
+
+
+
+
 
