@@ -3,9 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <title>Report - {{Name}}</title>
+    <script src="https://cdn.jsdelivr.net/npm/@twemoji/api@14.1.0/dist/twemoji.min.js" crossorigin="anonymous"></script>
     <style>
+        /* Twemoji inline sizing */
+        img.emoji {
+            height: 1em;
+            width: 1em;
+            margin: 0 0.05em 0 0.1em;
+            vertical-align: -0.1em;
+            display: inline;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { -webkit-print-color-adjust: exact; background: #fff; color: #333; }
+        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff; color: #333; margin: 0; padding: 0; }
 
         @media screen {
             body {
@@ -21,12 +30,12 @@
             }
         }
 
-        @page { size: A4; margin: 0; }
+        @page { size: 210mm 297mm; margin: 0 !important; padding: 0 !important; }
 
         .page {
             width: 210mm;
+            min-height: 297mm;
             height: 297mm;
-            max-height: 297mm;
             overflow: hidden;
             page-break-inside: avoid;
             page-break-after: always;
@@ -34,13 +43,19 @@
             background: white;
             display: flex;
             flex-direction: column;
-            padding: 12mm; /* reduced padding to prevent cutting */
+            padding: 0;
+            margin: 0;
             box-sizing: border-box;
         }
-        .page.cover { padding: 0; }
+        .page-content {
+            padding: 12mm;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
         .page:last-child { page-break-after: auto; }
 
-        .cover-img { width: 100%; height: 100%; object-fit: fill; display: block; margin: 0; outline: none; border: none; }
+        .cover-img { width: 210mm; height: 297mm; object-fit: cover; display: block; margin: 0; padding: 0; outline: none; border: none; }
         .cover-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:#ecf0f1; color:#bdc3c7; font-size:24px; }
 
         /* General Common */
@@ -266,6 +281,7 @@
 
     <!-- PAGE 3: LEARNER PROFILE -->
     <div class="page">
+      <div class="page-content">
         <div style="background: #F8F9F9; border: 1px solid #E5E8E8; border-radius: 8px; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
             <div style="font-size: 16px; font-weight: bold; color: #2C3E50;"><span style="color: #1e429b;">{{Name}}</span></div>
             <div style="font-size: 16px; font-weight: bold; color: #2C3E50;">Grade: <span style="color: #1e429b;">{{Grade}}</span></div>
@@ -329,6 +345,7 @@
                 <span style="font-style: italic;">IB profiles help you become a global-minded learner — embrace both your strengths and growth areas!</span>
             </div>
         </div>
+      </div>
     </div>
 
     <!-- PAGE 4: Back Cover -->
@@ -340,6 +357,12 @@
         {{/if}}
     </div>
 
+<script>
+    twemoji.parse(document.body, {
+        folder: 'svg',
+        ext: '.svg'
+    });
+</script>
 </body>
 </html>
 

@@ -79,8 +79,8 @@ async function compressAndGetBase64(filePath) {
     if (!filePath || !fs.existsSync(filePath)) return null;
     try {
         const buffer = await sharp(filePath)
-            .resize({ width: 1240, withoutEnlargement: true }) // A4 width at ~150dpi
-            .jpeg({ quality: 75 })
+            .resize({ width: 2480, withoutEnlargement: true }) // A4 width at ~300dpi
+            .jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: '4:4:4' })
             .toBuffer();
         return `data:image/jpeg;base64,${buffer.toString('base64')}`;
     } catch(e) {
@@ -338,14 +338,17 @@ app.post('/api/generate_batch', async (req, res) => {
                 const outputPath = path.join(outputDir, `${safeName}_Report_${timestamp}.pdf`);
 
                 const page = await browser.newPage();
+                await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 2 });
                 try {
-                    await page.setContent(htmlContent, { waitUntil: 'load' });
+                    await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
                     await page.pdf({
                         path: outputPath,
                         format: 'A4',
                         printBackground: true,
                         preferCSSPageSize: true,
-                        margin: { top: '0', right: '0', bottom: '0', left: '0' }
+                        margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
+                        width: '210mm',
+                        height: '297mm'
                     });
                     const fileName = `${safeName}_Report_${timestamp}.pdf`;
                       generatedFiles.push({ file: fileName, name: validName });
